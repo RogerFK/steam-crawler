@@ -26,9 +26,12 @@ def get_app_data(app_id):
     response = steam.apps.get_app_details(app_id)
     print(response)
 
+print("Hola")
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Crawl game data for a single game.")
     parser.add_argument("appid", help="App ID of the game to fetch data for.")
     args = parser.parse_args()
+    print("Hola")
     get_app_data(args.appid)

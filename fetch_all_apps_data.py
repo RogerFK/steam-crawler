@@ -10,11 +10,10 @@ from requests import request, Response
 import json
 import time
 import steamreviews
-import logging
+from database import *
+import os
 
-# we only need to log basic characters, no localized names, this saves some space
-logging.basicConfig(filename='example.log', encoding='ascii', level=logging.DEBUG)
-
+main_script = False
 try:
     KEY = config("STEAM_API_KEY")
 except UnicodeDecodeError as e:
@@ -27,80 +26,142 @@ except UndefinedValueError as e:
     exit(-1)
 
 steam = Steam(KEY)
+# Used for steamreviews
+# Reference: https://partner.steamgames.com/doc/store/getreviews
+# note: it would be interesting to use the "last update" date of the game, but
+# https://partner.steam-api.com/ISteamApps/GetAppDepotVersions/v1/ doesn't work for games I don't own an access token for 
+request_params = {
+    'review_type': 'all',
+    'filter': 'updated',
+    'day_range': '365',
+    'num_per_page': '100',
+    'language': 'all'
+}
 
-import mysql.connector
+# monkey patching to stop steamreviews from trying to open the reviews file or saving to them
+def get_output_filename(app_id):
+    return "NUL:" if os.name == "nt" else "/dev/null"
+steamreviews.download_reviews.get_output_filename = get_output_filename
 
-mydb = mysql.connector.connect(
-  host="localhost",
-  user="root",
-  password="root",
-)
-cursor = mydb.cursor(prepared=True)
-stmt = "INSERT INTO steam_games (appid, name, developer, publisher, score_rank, positive, negative, userscore, owners, average_forever, average_2weeks, median_forever, median_2weeks, price,"
-stmt += "initialprice, discount, ccu, genres, tags, languages, achievements, release_date, last_update, required_age, dlc, detailed_description, about_the_game, short_description, supported_languages, header_image, website, pc_requirements, mac_requirements, linux_requirements, legal_notice, developers, publishers, price_overview, packages, package_groups, platforms, categories, genres, screenshots, movies, recommendations, achievements, release_date, support_info, background, content_descriptors) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
-stmt = stmt.replace("?,", "%s,").replace("?)", "%s)")
+def load_review_dict(app_id):
+    # skips the file opening and loading
+    review_dict = dict()
+    review_dict["reviews"] = dict()
+    review_dict["query_summary"] = steamreviews.download_reviews.get_dummy_query_summary()
+    review_dict["cursors"] = dict()
 
-def get_app_data(file):
-    with open(file, "r", encoding="utf-8") as f:
-        for line in f:
-            app_id = line.strip()
-            retry = True
-            consecutive_retries = 0
-            while retry:
-                try:
-                    response = request("get", "https://store.steampowered.com/api/appdetails", params={"appids": app_id})
-                except Exception as e:
-                    print("Exception while requesting appdetails: " + str(e))
-                    time.sleep(60 + consecutive_retries * 30)
-                    consecutive_retries += 1
-                    if consecutive_retries > 18: # maximum waiting time for the connection to be back: 10 minutes
-                        # this high number also ensures the user can fix the problem without having to restart the script
-                        consecutive_retries = 18
-                    continue
-                retry = response.status_code != 200
-                if retry:
-                    print(f"REST API error ({response.status_code}): " + str(response.text))
-                    print("Headers: " + str(response.headers))
-                    print("Request headers: " + str(response.request.headers))
-                    time.sleep(60 + consecutive_retries * 30)
-                    consecutive_retries += 1
-                    if consecutive_retries > 6: # maximum waiting time: 4 minutes (which might be too much, but better safe than sorry)
-                        consecutive_retries = 6
-            appdata = json.loads(response.text)
-            if appdata[app_id]["success"]:
-                # First, check if this is a game
-                if "type" in appdata[app_id]["data"] and appdata[app_id]["data"]["type"] != "game":
-                    logging.debug("Skipping non-game: " + appdata[app_id]["data"]["name"])
-                    continue
-                request_params = dict()
-                # Reference: https://partner.steamgames.com/doc/store/getreviews
-                request_params['review_type'] = 'positive'
-                request_params['filter'] = 'updated'
-                # note: it would be interesting to use the "last update" date of the game, but
-                # https://partner.steam-api.com/ISteamApps/GetAppDepotVersions/v1/ doesn't work for games I don't own an access token for 
-                request_params['day_range'] = '28' # day_range = 28 is last two weeks, usually enough to paint a picture of the game's current state  
-                request_params['purchase_type'] = 'all'
-                request_params['num_per_page'] = '100'
-                request_params['cursor'] = '*'
-                request_params['language'] = 'all'
+    return review_dict
+steamreviews.download_reviews.load_review_dict = load_review_dict
 
-                review_dict, query_count = steamreviews.download_reviews_for_app_id(int(app_id),
-                                                                                chosen_request_params=request_params)
-                print("Review Dict", review_dict)
-                print("Query count", query_count)
-                # TODO change to MYSQL insert
-                with open("data/" + app_id + ".json", "w", encoding="utf-8") as f:
-                    f.write(json.dumps(appdata[app_id]["data"]))
-                print("App ID: " + app_id + " done.")
-                # debug
-                input("Press Enter to continue...")
-            else:
-                print(f"Error for app ID {app_id}: " + response.text)
+# These steam API rate limits still give headroom for the steamreviews library and my own calls to work
+# rate limits per day are 100.000 queries, so 250 queries every 5 minutes should be fine, 
+# specially if we have headroom for ~347 queries per 5 minutes (69.4 queries per minute)
+# either way, to be more precise we can just do it per minute, and add 10 seconds of headroom
+def get_steam_api_rate_limits():
+    rate_limits = {
+        "max_num_queries": 55,
+        "cooldown": (60) + 10,  # 1 minute + 10 seconds of headroom
+        "cooldown_bad_gateway": 10,  # arbitrary value to tackle 502 Bad Gateway due to saturated servers (during sales)
+    }
 
+    return rate_limits
+steamreviews.download_reviews.get_steam_api_rate_limits = get_steam_api_rate_limits
+
+def get_app_data(app_id, reviews=False):
+    rate_limits = get_steam_api_rate_limits()
+    retry = True
+    consecutive_retries = 0
+    if (is_processed(app_id)):
+        print(f"App {app_id} already processed.")
+        return
+    while retry:
+        try:
+            # response = steam.apps.get_app_details(int(app_id)) # I need the response code... can't use this one
+            response = request("GET", "https://store.steampowered.com/api/appdetails", params={"appids": app_id, "cc": "us", "l": "english"})
+        except Exception as e:
+            print("Exception while requesting appdetails: " + str(e))
+            consecutive_retries += 1
+            if consecutive_retries > 3 * 5: # maximum waiting time for the connection to be back: 5 minutes
+                # this high number also ensures the user may fix the problem without having to restart the script
+                consecutive_retries = 3 * 5
+            
+            print(f"Waiting {(consecutive_retries * 20 / 60)} minute(s) before retrying...")
+            time.sleep(consecutive_retries * 20)
+            continue
+        
+        retry = response.status_code != 200
+        if retry:
+            print(f"REST API error ({response.status_code}): " + str(response.text))
+            print("Headers: " + str(response.headers))
+            time.sleep(60 + consecutive_retries * 20)
+            consecutive_retries += 1
+            if consecutive_retries > 3: # maximum waiting time for the API to respond again: 2 minutes
+                # this high number also ensures the user may fix the problem without having to restart the script
+                consecutive_retries = 6
+    
+    appdata = json.loads(response.text)
+    if appdata[app_id]["success"]:
+        # First, check if this is a game
+        if "type" in appdata[app_id]["data"] and appdata[app_id]["data"]["type"] != "game":
+            print("Skipping non-game: " + appdata[app_id]["data"]["name"])
+            return
+        # Then, check if this game has reviews
+        if reviews:
+            print("Getting reviews for " + appdata[app_id]["data"]["name"])
+            request_params['cursor'] = '*'
+            review_dict, query_count = steamreviews.download_reviews_for_app_id(int(app_id),
+                                                                            chosen_request_params=request_params, verbose=True)
+            query_summary = review_dict["query_summary"]
+        else:
+            print("Skipping reviews for " + appdata[app_id]["data"]["name"])
+            success_flag, query_summary, query_count = steamreviews.download_reviews.download_the_full_query_summary(app_id, 0, request_params)
+        
+        process_game_data(app_id, appdata[app_id]["data"], query_summary)
+
+        process_game_reviews(app_id, review_dict["reviews"])
+        
+        mark_as_processed(app_id)
+
+        print("App ID: " + app_id + " done.")
+    else:
+        print(f"Error for app ID {app_id}: " + response.text)
 
 if __name__ == "__main__":
+    main_script = True
+
     import argparse
     parser = argparse.ArgumentParser(description="Crawl game data for every game in an input file.")
     parser.add_argument("file", help="The name of the file.")
     args = parser.parse_args()
-    get_app_data(args.file)
+    
+    try:
+        with open(args.file, "r", encoding="utf-8") as f:
+            for line in f:
+                app_id = line.strip()
+                get_app_data(app_id, reviews=True)
+        # When we're done, delete the files and start getting appids from the database
+        with open(args.file, "w", encoding="utf-8") as f:
+            f.write("")
+        
+        # Get appids from the database
+        raise KeyboardInterrupt
+        while True: # wait for KeyboardInterrupt or no appids left, which will break the loop
+            appids = cur.fetchone()
+            if appids is None:
+                break
+            get_app_data(appids[0], reviews=True)
+            con.commit()
+
+    except KeyboardInterrupt:
+        print("Exiting...")
+        exit(0)
+        # but first delete processed_appids from args.file
+        with open(args.file, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        cur.execute("SELECT appid FROM processed_appids")
+        processed_appids = set(cur.fetchall())
+        with open(args.file, "w", encoding="utf-8") as f:
+            for line in lines:
+                if line.strip() not in processed_appids:
+                    f.write(line)
+        # also save the last cursor from steamreviews
