@@ -111,13 +111,13 @@ _get_next_autoincrement_id_stmt = "SELECT AUTO_INCREMENT FROM information_schema
 def insert_game_developers(appid, developers: list[str]):
     for developer in developers:
         _get_developer_id_cursor.execute(_get_developer_id_stmt, (developer,))
-        developer_id = _get_developer_id_cursor.fetchone()[0]
+        developer_id = _get_developer_id_cursor.fetchone()
         if developer_id is None: # doesn't exist
             _get_next_autoincrement_id_cursor.execute(_get_next_autoincrement_id_stmt)
-            developer_id = _get_next_autoincrement_id_cursor.fetchone()[0]
+            developer_id = _get_next_autoincrement_id_cursor.fetchone()
             _insert_developer_cursor.execute(_insert_developer_stmt, (developer,))
             connection.commit() # we need commit for the next row to not violate the foreign key constraint
-        print(developer_id)
+        developer_id = developer_id[0]
         _insert_game_developers_cursor.execute(_insert_game_developers_stmt, (appid, developer_id))
     # connection.commit()
 
@@ -142,12 +142,13 @@ _get_next_autoincrement_id_pub_stmt = "SELECT AUTO_INCREMENT FROM information_sc
 def insert_game_publishers(appid, publishers: list[str]):
     for publisher in publishers:
         _get_publisher_id_cursor.execute(_get_publisher_id_stmt, (publisher,))
-        publisher_id = _get_publisher_id_cursor.fetchone()[0]
+        publisher_id = _get_publisher_id_cursor.fetchone()
         if publisher_id is None:
             _get_next_autoincrement_id_pub_cursor.execute(_get_next_autoincrement_id_pub_stmt)
-            publisher_id = _get_next_autoincrement_id_pub_cursor.fetchone()[0]
+            publisher_id = _get_next_autoincrement_id_pub_cursor.fetchone()
             _insert_publisher_cursor.execute(_insert_publisher_stmt, (publisher,))
             connection.commit() # we need commit for the next row to not violate the foreign key constraint
+        publisher_id = publisher_id[0]
         _insert_game_publishers_cursor.execute(_insert_game_publishers_stmt, (appid, publisher_id))
     # connection.commit()
 
