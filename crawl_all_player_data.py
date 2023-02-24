@@ -16,8 +16,15 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
     unprocessed_players = get_100_unprocessed_players()
     while len(unprocessed_players) > 0:
         steam_ids = [str(player[0]) for player in unprocessed_players]
-        response = steam.users.get_user_details(",".join(steam_ids), single=False)
-        query_count = check_rate_limit(query_count)
+        while True:
+            try:
+                response = steam.users.get_user_details(",".join(steam_ids), single=False)
+                query_count = check_rate_limit(query_count)
+                break
+            except Exception as e:
+                print("Exception while requesting user details. Waiting 10 seconds: ")
+                print(e.with_traceback)
+                time.sleep(10)
 
         players = response["players"]
         for player in players:
@@ -37,9 +44,16 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
             loccountrycode = player["loccountrycode"] if "loccountrycode" in player else None
             locstatecode = player["locstatecode"] if "locstatecode" in player else None
             loccityid = player["loccityid"] if "loccityid" in player else None
+            while True:
+                try:
+                    owned_games = steam.users.get_owned_games(steamid, include_appinfo=False)
+                    query_count = check_rate_limit(query_count)
+                    break
+                except Exception as e:
+                    print("Exception while requesting user details. Waiting 10 seconds: ")
+                    print(e.with_traceback)
+                    time.sleep(10)
             
-            owned_games = steam.users.get_owned_games(steamid, include_appinfo=False)
-            query_count = check_rate_limit(query_count)
             if "games" not in owned_games:
                 if verbose:
                     print("Game list is private, skipping...")
@@ -87,6 +101,8 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
                                loccityid=loccityid)
             print("Processed player", steamid)
         unprocessed_players = get_100_unprocessed_players()
+    
+    return query_count
     
 
 if __name__ == "__main__":

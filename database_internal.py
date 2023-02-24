@@ -32,11 +32,13 @@ _insert_player_data_stmt = "INSERT INTO player_data "\
 
 _update_player_data_numgames_from_review_stmt = "UPDATE player_data "\
     "SET num_games_owned = ?, "\
-    "num_reviews = ? "\
+    "num_reviews = ?, "\
+    "date_retrieved = CURRENT_TIMESTAMP "\
     "WHERE steamid = ?;"
 
 _update_player_data_num_reviews_stmt = "UPDATE player_data "\
-    "SET num_reviews = ? "\
+    "SET num_reviews = ?, "\
+    "date_retrieved = CURRENT_TIMESTAMP "\
     "WHERE steamid = ?;"
 
 _insert_player_data_from_crawl_stmt = "INSERT INTO player_data "\
@@ -63,7 +65,8 @@ _update_player_data_from_review_stmt = "UPDATE player_data "\
     "locstatecode = ?, "\
     "loccityid = ?, "\
     "num_games_owned = ?, "\
-    "visibility = ? "\
+    "visibility = ?, "\
+    "date_retrieved = CURRENT_TIMESTAMP "\
     "WHERE steamid = ?;"
 
 _fetch_player_data_stmt = "SELECT steamid, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility "\
