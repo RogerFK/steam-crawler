@@ -4,41 +4,19 @@ Author: Jorge González
 Date: 2023-02-10
 """
 
-from steam import Steam
-from decouple import config, UndefinedValueError
+from typing import Tuple
 from requests import request, Response
+
 import json
 import time
 import steamreviews
 from database import *
 import os
+from config import get_steam_api_rate_limits, check_rate_limit, request_params
 
-main_script = False
-try:
-    KEY = config("STEAM_API_KEY")
-except UnicodeDecodeError as e:
-    print("Ensure your .env/settings.ini file is encoded in UTF-8.")
-    exit(-1)
-except UndefinedValueError as e:
-    print(e)
-    print("Tips:\r\n- You can create an .env file with 'STEAM_API_KEY=\"YOUR_API_KEY\"'.")
-    print("- You can also define an environment variable STEAM_API_KEY with your API key.")
-    exit(-1)
-
-steam = Steam(KEY)
-# Used for steamreviews
-# Reference: https://partner.steamgames.com/doc/store/getreviews
-# note: it would be interesting to use the "last update" date of the game, but
-# https://partner.steam-api.com/ISteamApps/GetAppDepotVersions/v1/ doesn't work for games I don't own an access token for 
-request_params = {
-    'review_type': 'all',
-    'filter': 'updated',
-    'day_range': '365',
-    'num_per_page': '100',
-    'language': 'all'
-}
 
 # monkey patching to stop steamreviews from trying to open the reviews file or saving to them
+# just to save on IO operations
 def get_output_filename(app_id):
     return "NUL:" if os.name == "nt" else "/dev/null"
 steamreviews.download_reviews.get_output_filename = get_output_filename
@@ -52,31 +30,27 @@ def load_review_dict(app_id):
 
     return review_dict
 steamreviews.download_reviews.load_review_dict = load_review_dict
-
-# These steam API rate limits still give headroom for the steamreviews library and my own calls to work
-# rate limits per day are 100.000 queries, so 250 queries every 5 minutes should be fine, 
-# specially if we have headroom for ~347 queries per 5 minutes (69.4 queries per minute)
-# either way, to be more precise we can just do it per minute, and add 10 seconds of headroom
-def get_steam_api_rate_limits():
-    rate_limits = {
-        "max_num_queries": 55,
-        "cooldown": (60) + 10,  # 1 minute + 10 seconds of headroom
-        "cooldown_bad_gateway": 10,  # arbitrary value to tackle 502 Bad Gateway due to saturated servers (during sales)
-    }
-
-    return rate_limits
 steamreviews.download_reviews.get_steam_api_rate_limits = get_steam_api_rate_limits
 
-def get_app_data(app_id, reviews=False):
-    rate_limits = get_steam_api_rate_limits()
+SKIPPED = 3
+FULLY_PROCESSED = 2
+ALREADY_EXISTS = 1
+SUCCESS = 0
+ERROR = -1
+
+def get_app_data(app_id: str, reviews=False, query_count=0, only_games=True, verbose=True) -> Tuple[int, int]:
     retry = True
     consecutive_retries = 0
+    
     if (is_processed(app_id)):
         print(f"App {app_id} already processed.")
-        return
+        return FULLY_PROCESSED, query_count
+    elif (reviews == False and game_exists(app_id)):
+        print(f"App {app_id} already exists in database.")
+        return ALREADY_EXISTS, query_count
+    
     while retry:
         try:
-            # response = steam.apps.get_app_details(int(app_id)) # I need the response code... can't use this one
             response = request("GET", "https://store.steampowered.com/api/appdetails", params={"appids": app_id, "cc": "us", "l": "english"})
         except Exception as e:
             print("Exception while requesting appdetails: " + str(e))
@@ -88,7 +62,7 @@ def get_app_data(app_id, reviews=False):
             print(f"Waiting {(consecutive_retries * 20 / 60)} minute(s) before retrying...")
             time.sleep(consecutive_retries * 20)
             continue
-        
+
         retry = response.status_code != 200
         if retry:
             print(f"REST API error ({response.status_code}): " + str(response.text))
@@ -98,37 +72,46 @@ def get_app_data(app_id, reviews=False):
             if consecutive_retries > 3: # maximum waiting time for the API to respond again: 2 minutes
                 # this high number also ensures the user may fix the problem without having to restart the script
                 consecutive_retries = 6
-    
+    query_count = check_rate_limit(query_count)
     appdata = json.loads(response.text)
     if appdata[app_id]["success"]:
         # First, check if this is a game
-        if "type" in appdata[app_id]["data"] and appdata[app_id]["data"]["type"] != "game":
-            print("Skipping non-game: " + appdata[app_id]["data"]["name"])
-            return
+        if only_games and "type" in appdata[app_id]["data"] and\
+              not (appdata[app_id]["data"]["type"] == "game"
+                   or appdata[app_id]["data"]["type"] == "mod"
+                   or appdata[app_id]["data"]["type"] == "demo"):
+            if verbose:
+                print("Skipping non-game: " + appdata[app_id]["data"]["name"])
+            return SKIPPED, query_count
         # Then, check if this game has reviews
         if reviews:
-            print("Getting reviews for " + appdata[app_id]["data"]["name"])
+            if verbose:
+                print("Getting reviews for " + appdata[app_id]["data"]["name"])
             request_params['cursor'] = '*'
             review_dict, query_count = steamreviews.download_reviews_for_app_id(int(app_id),
-                                                                            chosen_request_params=request_params, verbose=True)
+                                                                            chosen_request_params=request_params,
+                                                                            query_count=query_count, 
+                                                                            verbose=True)
             query_summary = review_dict["query_summary"]
         else:
-            print("Skipping reviews for " + appdata[app_id]["data"]["name"])
-            success_flag, query_summary, query_count = steamreviews.download_reviews.download_the_full_query_summary(app_id, 0, request_params)
+            if verbose:
+                print("Getting review summary for " + appdata[app_id]["data"]["name"])
+            _, query_summary, query_count = steamreviews.download_reviews.download_the_full_query_summary(app_id, query_count, request_params)
         
         process_game_data(app_id, appdata[app_id]["data"], query_summary)
-
-        process_game_reviews(app_id, review_dict["reviews"])
         
-        mark_as_processed(app_id)
-
-        print("App ID: " + app_id + " done.")
+        if reviews: # we need to execute this after process_game_data, because of the FK constraint
+            process_game_reviews(app_id, review_dict["reviews"])
+            mark_as_processed(app_id) # it's only fully processed when the reviews are processed
+        if verbose:
+            print("App ID: " + app_id + " done.")
+        # NOTE: we should probably check the rate limits here, but we're ~10 requests under Steam official limits
     else:
         print(f"Error for app ID {app_id}: " + response.text)
+        return ERROR, query_count
+    return SUCCESS, query_count
 
 if __name__ == "__main__":
-    main_script = True
-
     import argparse
     parser = argparse.ArgumentParser(description="Crawl game data for every game in an input file.")
     parser.add_argument("file", help="The name of the file.")

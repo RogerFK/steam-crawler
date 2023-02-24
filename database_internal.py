@@ -13,9 +13,34 @@ connection = mysql.connector.connect(
 cur = connection.cursor()
 
 _insert_player_data_cursor = connection.cursor(prepared=True)
+_fetch_player_data_cursor = connection.cursor(prepared=True)
 
 _insert_player_data_stmt = "INSERT INTO player_data "\
-    "(steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews) VALUES"\
+    "(steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility) VALUES "\
+    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE "\
+    "personaname = VALUES(personaname), "\
+    "lastlogoff = VALUES(lastlogoff), "\
+    "commentpermission = VALUES(commentpermission), "\
+    "primaryclanid = VALUES(primaryclanid), "\
+    "timecreated = VALUES(timecreated), "\
+    "loccountrycode = VALUES(loccountrycode), "\
+    "locstatecode = VALUES(locstatecode), "\
+    "loccityid = VALUES(loccityid), "\
+    "num_games_owned = VALUES(num_games_owned), "\
+    "num_reviews = VALUES(num_reviews), "\
+    "visibility = VALUES(visibility);"
+
+_update_player_data_numgames_from_review_stmt = "UPDATE player_data "\
+    "SET num_games_owned = ?, "\
+    "num_reviews = ? "\
+    "WHERE steamid = ?;"
+
+_update_player_data_num_reviews_stmt = "UPDATE player_data "\
+    "SET num_reviews = ? "\
+    "WHERE steamid = ?;"
+
+_insert_player_data_from_crawl_stmt = "INSERT INTO player_data "\
+    "(steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, visibility) VALUES "\
     "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE "\
     "personaname = VALUES(personaname), "\
     "lastlogoff = VALUES(lastlogoff), "\
@@ -26,14 +51,45 @@ _insert_player_data_stmt = "INSERT INTO player_data "\
     "locstatecode = VALUES(locstatecode), "\
     "loccityid = VALUES(loccityid), "\
     "num_games_owned = VALUES(num_games_owned), "\
-    "num_reviews = VALUES(num_reviews)"
+    "visibility = VALUES(visibility);"
 
-def insert_player_data(steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews):
-    _insert_player_data_cursor.execute(_insert_player_data_stmt, (steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews))
-    # connection.commit()
+_update_player_data_from_review_stmt = "UPDATE player_data "\
+    "SET personaname = ?, "\
+    "lastlogoff = ?, "\
+    "commentpermission = ?, "\
+    "primaryclanid = ?, "\
+    "timecreated = FROM_UNIXTIME(?), "\
+    "loccountrycode = ?, "\
+    "locstatecode = ?, "\
+    "loccityid = ?, "\
+    "num_games_owned = ?, "\
+    "visibility = ? "\
+    "WHERE steamid = ?;"
 
-def insert_partial_player_data(steamid, num_games_owned, num_reviews):
-    insert_player_data(steamid, None, None, None, None, None, None, None, None, num_games_owned, num_reviews)
+_fetch_player_data_stmt = "SELECT steamid, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility "\
+    "FROM player_data WHERE steamid = ?;"
+
+def internal_insert_player_data(steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility):
+    _insert_player_data_cursor.execute(_insert_player_data_stmt, (steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility))
+
+
+def internal_get_player(steamid):
+    _fetch_player_data_cursor.execute(_fetch_player_data_stmt, (steamid,))
+    return _fetch_player_data_cursor.fetchone()
+
+def internal_update_player_data(steamid, personaname, visibility, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned):
+    _insert_player_data_cursor.execute(_update_player_data_from_review_stmt, (personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, visibility, steamid))
+
+def internal_insert_partial_player_data(steamid, num_games_owned, num_reviews):
+    internal_insert_player_data(steamid, None, None, None, None, None, None, None, None, num_games_owned, num_reviews, None)
+
+_get_unprocessed_players_cursor = connection.cursor(prepared=True)
+
+_get_unprocessed_players_stmt = "SELECT steamid FROM player_data WHERE visibility IS NULL ORDER BY num_games_owned LIMIT 100;"
+
+def internal_get_unprocessed_players():
+    _get_unprocessed_players_cursor.execute(_get_unprocessed_players_stmt)
+    return _get_unprocessed_players_cursor.fetchall()
 
 _insert_game_details_cursor = connection.cursor(prepared=True)
 
@@ -54,7 +110,7 @@ _insert_game_details_stmt = "INSERT INTO game_details "\
     "release_date = VALUES(release_date), "\
     "coming_soon = VALUES(coming_soon);"
 
-def insert_game_details(appid, name, required_age, is_free, controller_support, has_demo, price_usd, mac_os, positive_reviews, negative_reviews, total_reviews, has_achievements, release_date, coming_soon):
+def internal_insert_game_details(appid, name, required_age, is_free, controller_support, has_demo, price_usd, mac_os, positive_reviews, negative_reviews, total_reviews, has_achievements, release_date, coming_soon):
     _insert_game_details_cursor.execute(_insert_game_details_stmt, (appid, name, required_age, is_free, controller_support, has_demo, price_usd, mac_os, positive_reviews, negative_reviews, total_reviews, has_achievements, release_date, coming_soon))
     # connection.commit()
 
@@ -68,7 +124,7 @@ _insert_genre_cursor = connection.cursor(prepared=True)
 
 _insert_genre_stmt = "INSERT IGNORE INTO genres VALUES (?, ?);"
 
-def insert_game_genres(appid, genres):
+def internal_insert_game_genres(appid, genres):
     for genre in genres:
         _insert_genre_cursor.execute(_insert_genre_stmt, (genre["id"], genre["description"]))
         _insert_game_genres_cursor.execute(_insert_game_genres_stmt, (appid, genre["id"]))
@@ -84,7 +140,7 @@ _insert_category_cursor = connection.cursor(prepared=True)
 
 _insert_category_stmt = "INSERT IGNORE INTO categories VALUES (?, ?);"
 
-def insert_game_categories(appid, categories):
+def internal_insert_game_categories(appid, categories):
     for category in categories:
         _insert_category_cursor.execute(_insert_category_stmt, (category["id"], category["description"]))
         _insert_game_categories_cursor.execute(_insert_game_categories_stmt, (appid, category["id"]))
@@ -108,7 +164,7 @@ _get_next_autoincrement_id_cursor = connection.cursor(prepared=True)
 
 _get_next_autoincrement_id_stmt = "SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'steam_tfg_jgg' AND TABLE_NAME = 'developers';"
 
-def insert_game_developers(appid, developers: list[str]):
+def internal_insert_game_developers(appid, developers: list[str]):
     for developer in developers:
         _get_developer_id_cursor.execute(_get_developer_id_stmt, (developer,))
         developer_id = _get_developer_id_cursor.fetchone()
@@ -139,7 +195,7 @@ _get_next_autoincrement_id_pub_cursor = connection.cursor(prepared=True)
 
 _get_next_autoincrement_id_pub_stmt = "SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'steam_tfg_jgg' AND TABLE_NAME = 'publishers';"
 
-def insert_game_publishers(appid, publishers: list[str]):
+def internal_insert_game_publishers(appid, publishers: list[str]):
     for publisher in publishers:
         _get_publisher_id_cursor.execute(_get_publisher_id_stmt, (publisher,))
         publisher_id = _get_publisher_id_cursor.fetchone()
@@ -165,9 +221,9 @@ _insert_player_game_reviews_stmt = "INSERT INTO player_game_reviews "\
     "steam_purchase = VALUES(steam_purchase), "\
     "written_during_early_access = VALUES(written_during_early_access);"
 
-def insert_player_game_review(recommendationid, steamid, appid, voted_up, timestamp_created, timestamp_updated, playtime_at_review, playtime_forever,  received_for_free, steam_purchase, written_during_early_access, last_played):
+def internal_insert_player_game_review(recommendationid, steamid, appid, voted_up, timestamp_created, timestamp_updated, playtime_at_review, playtime_forever,  received_for_free, steam_purchase, written_during_early_access, last_played):
     _insert_player_game_reviews_cursor.execute(_insert_player_game_reviews_stmt, (recommendationid, steamid, appid, voted_up, timestamp_created, timestamp_updated, playtime_at_review, received_for_free, steam_purchase, written_during_early_access))
-    insert_player_game(steamid, appid, playtime_forever, None, None, None, None, last_played)
+    internal_insert_player_game(steamid, appid, playtime_forever, None, None, None, None, last_played)
     # connection.commit()
 
 _insert_player_games_cursor = connection.cursor(prepared=True)
@@ -182,7 +238,8 @@ _insert_player_games_stmt = "INSERT INTO player_games "\
     "achievement_percentage = VALUES(achievement_percentage), "\
     "rtime_last_played = VALUES(rtime_last_played);"
 
-def insert_player_game(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, achievement_percentage, rtime_last_played):
+def internal_insert_player_game(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, achievement_percentage, rtime_last_played):
+    rtime_last_played = rtime_last_played if rtime_last_played > 0 else 1 # apparently MySQL's timestamps go from 1970-01-01 00:00:01 to 2038-01-19 03:14:07, 1970-01-01 00:00:00 isn't valid
     _insert_player_games_cursor.execute(_insert_player_games_stmt, (steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, achievement_percentage, rtime_last_played))
     # connection.commit()
 
@@ -190,7 +247,7 @@ _insert_candidate_games_cursor = connection.cursor(prepared=True)
 
 _insert_candidate_games_stmt = "INSERT INTO candidate_appids (appid) VALUES (?) ON DUPLICATE KEY UPDATE count = count + 1;"
 
-def insert_or_update_candidate_game(appid):
+def internal_insert_or_update_candidate_game(appid):
     _insert_candidate_games_cursor.execute(_insert_candidate_games_stmt, (appid,))
     # connection.commit()
 
@@ -202,7 +259,7 @@ _delete_candidate_games_cursor = connection.cursor(prepared=True)
 
 _delete_candidate_games_stmt = "DELETE FROM candidate_appids WHERE appid = ?;"
 
-def insert_processed_appid(appid):
+def internal_insert_processed_appid(appid):
     _insert_processed_appids_cursor.execute(_insert_processed_appids_stmt, (appid,))
     _delete_candidate_games_cursor.execute(_delete_candidate_games_stmt, (appid,))
     # connection.commit()
@@ -210,7 +267,15 @@ def insert_processed_appid(appid):
 _get_candidate_games_cursor = connection.cursor(prepared=True)
 
 _get_candidate_games_stmt = "SELECT appid FROM candidate_appids ORDER BY count DESC LIMIT ?;"
-def get_candidate_games(limit):
+def internal_get_candidate_games(limit):
     _get_candidate_games_cursor.execute(_get_candidate_games_stmt, (limit,))
     candidates = _get_candidate_games_cursor.fetchall()
     return [candidate[0] for candidate in candidates]
+
+get_game_data = connection.cursor(prepared=True)
+
+get_game_data_stmt = "SELECT * FROM game_details WHERE appid = ?;"
+
+def internal_get_game_data(appid):
+    get_game_data.execute(get_game_data_stmt, (appid,))
+    return get_game_data.fetchone()

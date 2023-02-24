@@ -8,6 +8,7 @@ from steam import Steam
 from decouple import config, UndefinedValueError
 from requests import request, Response
 import json
+import steamreviews
 
 try:
     KEY = config("STEAM_API_KEY")
@@ -23,15 +24,17 @@ except UndefinedValueError as e:
 steam = Steam(KEY)
 
 def get_app_data(app_id):
+    # Get app details
     response = steam.apps.get_app_details(app_id)
-    print(response)
+    with open(f"app_{app_id}_details.json", "w") as f:
+        f.write(response)
 
-print("Hola")
+    #steamreviews.download_reviews_for_app_id(int(app_id),
+    #                                chosen_request_params={"cursor": 'AoJ49Yzl34EDf5SzwgM='}, verbose=True)
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Crawl game data for a single game.")
     parser.add_argument("appid", help="App ID of the game to fetch data for.")
     args = parser.parse_args()
-    print("Hola")
     get_app_data(args.appid)

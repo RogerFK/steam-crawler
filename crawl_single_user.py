@@ -22,18 +22,27 @@ except UndefinedValueError as e:
 steam = Steam(KEY)
 
 def get_user_data(user_id):
-    response = steam.users.get_owned_games(user_id)
-    print(response)
-#    for keys,values in response.items():
-#        print(keys)
-#        print(values)
+    response = steam.users.get_user_details(user_id, single=False)
+    with open(f"data/single_{user_id}_data.json", "w") as f:
+        json.dump(response, f, indent=4)
+    player = response["players"][0]
+    if player["communityvisibilitystate"] == 1:
+        print("Private profile, setting basic player profile...")
+        # TODO: Mark visibility as 0 in database
+        return
+    owned_games = steam.users.get_owned_games(player["steamid"], include_appinfo=False)
+    if "games" not in owned_games:
+        print("Game list is private, skipping...")
+        # TODO: Mark visibility as 1 in database
+        return
+    games = owned_games["games"] # if private returns play
+    with open(f"data/single_{user_id}_games.json", "w") as f:
+        json.dump(games, f, indent=4)
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Crawl game data for a single user.")
     parser.add_argument("user", help="Steam ID of the user to crawl. Can be a vanity URL or a Steam ID.")
     args = parser.parse_args()
-    for i in range(0, 2):
-        get_user_data(args.user)
-        time.sleep(0.3)
-
+    get_user_data(args.user)
+    
