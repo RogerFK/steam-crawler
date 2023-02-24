@@ -14,7 +14,7 @@ def process_game_data(appid, appdetails, query_summary):
     print(f"Inserting game with appid {appid} into the database")
     name = appdetails["name"]
     # EA's Mass Effect Legendary Edition has a required_age of 17+ instead of just 17, this regex fixes that
-    required_age = int(re.sub(r"\D", "", appdetails["required_age"])) if "required_age" in appdetails else 0
+    required_age = int(re.sub(r"\D", "", str(appdetails["required_age"]))) if "required_age" in appdetails else 0
     is_free = appdetails["is_free"]
     has_demo = "demos" in appdetails
     price_usd = int(appdetails["price_overview"]["final"]) if "price_overview" in appdetails else 0
