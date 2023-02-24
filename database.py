@@ -120,7 +120,6 @@ def process_steam_user(steamid, personaname, visibility, num_games_owned = 0, la
         # we can't really know how many reviews they have which is why we set it to 0
         internal_insert_player_data(steamid, personaname, visibility, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews=0)
     connection.commit()
-    print("Processed player", steamid)
 
 def insert_player_game_data(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played, achievement_percentage=-1):
     insert_candidate_game(appid)

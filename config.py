@@ -2,6 +2,7 @@
 from steam import Steam
 from decouple import config, UndefinedValueError
 import time
+from collections import deque
 try:
     KEY = config("STEAM_API_KEY")
 except UnicodeDecodeError as e:
@@ -31,19 +32,37 @@ request_params = {
 # specially if we have headroom for ~347 queries per 5 minutes (69.4 queries per minute)
 # either way, to be more precise we can just do it per minute, and add 10 seconds of headroom
 _rate_limits = {
-    "max_num_queries": 58,
-    "cooldown": (30),  # 30 secs
+    "max_num_queries": 64,
+    "cooldown": (60),  # 60 secs for steamreviews
     "cooldown_bad_gateway": 10,  # arbitrary value to tackle 502 Bad Gateway due to saturated servers (during sales)
 }
 
 def get_steam_api_rate_limits():
     return _rate_limits
 
+max_num_queries = _rate_limits["max_num_queries"]
+cooldown = _rate_limits["cooldown"]
+timestamp_queue = deque(maxlen=max_num_queries + 1)
+
 def check_rate_limit(count):
-    count + 1
-    if count >= _rate_limits["max_num_queries"]:
-        print(f"Reached {_rate_limits['max_num_queries']} queries, waiting {_rate_limits['cooldown']} seconds...")
-        time.sleep(_rate_limits["cooldown"])
-        count = 0
-    
+    timestamp_queue.appendleft(time.time())
+    count = len(timestamp_queue)
+
+    if count > max_num_queries:
+        # pop every timestamp that is older than 60 seconds
+        popped_time = timestamp_queue.pop()
+        elapsed_time = time.time() - popped_time
+        while elapsed_time > cooldown:
+            popped_time = timestamp_queue.pop()
+            elapsed_time = time.time() - popped_time
+
+        count = len(timestamp_queue)
+        if count >= max_num_queries:
+            # now empty the query and get the first timestamp
+            popped_time = timestamp_queue.pop()
+
+            wait_time = cooldown - (time.time() - popped_time)
+            print(f"Waiting {wait_time} seconds to avoid rate limit...")
+            time.sleep(wait_time)
+            count -= 1
     return count

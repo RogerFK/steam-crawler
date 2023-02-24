@@ -99,7 +99,7 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
                                loccountrycode=loccountrycode, 
                                locstatecode=locstatecode,
                                loccityid=loccityid)
-            print("Processed player", steamid)
+        print(f"Processed 100 players ({steam_ids}), Query count:", query_count)
         unprocessed_players = get_100_unprocessed_players()
     
     return query_count
