@@ -41,17 +41,18 @@ ERROR = -1
 def get_app_data(app_id: str, reviews=False, query_count=0, only_games=True, verbose=True) -> Tuple[int, int]:
     retry = True
     consecutive_retries = 0
-    
+    exists = game_exists(app_id)
     if (is_processed(app_id)):
         print(f"App {app_id} already processed.")
         return FULLY_PROCESSED, query_count
-    elif (reviews == False and game_exists(app_id)):
-        print(f"App {app_id} already exists in database.")
+    elif (reviews == False and exists):
+        print(f"App without reviews {app_id} already exists in database.")
         return ALREADY_EXISTS, query_count
     
-    while retry:
+    while retry and not exists:
         try:
             response = request("GET", "https://store.steampowered.com/api/appdetails", params={"appids": app_id, "cc": "us", "l": "english"})
+            query_count = check_rate_limit(query_count)
         except Exception as e:
             print("Exception while requesting appdetails: " + str(e))
             consecutive_retries += 1
@@ -72,7 +73,7 @@ def get_app_data(app_id: str, reviews=False, query_count=0, only_games=True, ver
             if consecutive_retries > 3: # maximum waiting time for the API to respond again: 2 minutes
                 # this high number also ensures the user may fix the problem without having to restart the script
                 consecutive_retries = 6
-    query_count = check_rate_limit(query_count)
+
     appdata = json.loads(response.text)
     if appdata[app_id]["success"]:
         # First, check if this is a game

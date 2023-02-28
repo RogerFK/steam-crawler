@@ -15,6 +15,7 @@ from config import steam, check_rate_limit
 def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=False):
     unprocessed_players = get_100_unprocessed_players()
     while len(unprocessed_players) > 0:
+        start_time = time.time()
         steam_ids = [str(player[0]) for player in unprocessed_players]
         while True:
             try:
@@ -25,7 +26,6 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
                 print("Exception while requesting user details. Waiting 10 seconds: ")
                 print(e.with_traceback)
                 time.sleep(10)
-
         players = response["players"]
         for player in players:
             steamid = player["steamid"]
@@ -99,7 +99,7 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
                                loccountrycode=loccountrycode, 
                                locstatecode=locstatecode,
                                loccityid=loccityid)
-        print(f"Processed 100 players ({steam_ids}), Query count:", query_count)
+        print(f"Processed 100 players ({steam_ids}), Time to process batch:", time.time() - start_time, "seconds")
         unprocessed_players = get_100_unprocessed_players()
     
     return query_count
