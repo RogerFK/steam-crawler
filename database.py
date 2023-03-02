@@ -21,7 +21,7 @@ def process_game_data(appid, appdetails, query_summary):
     mac_os = appdetails["platforms"]["mac"] if "platforms" in appdetails and "mac" in appdetails["platforms"] else False
     positive_reviews = query_summary["total_positive"] if "total_positive" in query_summary else 0
     negative_reviews = query_summary["total_negative"] if "total_negative" in query_summary else 0
-    total_reviews = query_summary["total_reviews"] if "total_reviews" in query_summary else 0
+    total_reviews = query_summary["total_reviews"] if "total_reviews" in query_summary else positive_reviews + negative_reviews
     has_achievements = appdetails["achievements"]["total"] > 0 if "achievements" in appdetails else False
     release_date = appdetails["release_date"]["date"] if "release_date" in appdetails else None
     coming_soon = appdetails["release_date"]["coming_soon"] if "release_date" in appdetails else False

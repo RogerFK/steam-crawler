@@ -6,11 +6,12 @@ Date: 2023-02-20
 
 import json
 import time
+import requests
 import steamreviews
 from database import *
 import os
 from crawl_app_data import get_app_data, ERROR, SUCCESS, ALREADY_EXISTS, FULLY_PROCESSED, SKIPPED
-from config import steam, check_rate_limit
+from config import steam, check_rate_limit, KEY
 
 def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=False):
     unprocessed_players = get_100_unprocessed_players()
@@ -21,10 +22,15 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
             try:
                 response = steam.users.get_user_details(",".join(steam_ids), single=False)
                 query_count = check_rate_limit(query_count)
-                break
+                if "players" in response:
+                    break
+                else:
+                    print("Error while requesting user details, no players. Waiting 10 seconds: ")
+                    print(response)
+                    time.sleep(10)
             except Exception as e:
                 print("Exception while requesting user details. Waiting 10 seconds: ")
-                print(e.with_traceback)
+                print(e)
                 time.sleep(10)
         players = response["players"]
         for player in players:
@@ -46,12 +52,25 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
             loccityid = player["loccityid"] if "loccityid" in player else None
             while True:
                 try:
-                    owned_games = steam.users.get_owned_games(steamid, include_appinfo=False)
+                    resp = requests.request(
+                        "get",
+                        "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/",
+                        params={"steamid": steamid,
+                                "include_appinfo": False,
+                                "include_played_free_games": True,
+                                "key": KEY},
+                    )
                     query_count = check_rate_limit(query_count)
-                    break
+                    if resp.status_code == 200: # I didn't trust the API to return stuff properly when rate limited
+                        owned_games = json.loads(resp.text)["response"]
+                        break
+                    else:
+                        print("Error while requesting owned games. Waiting 3 seconds: ")
+                        print(resp.text)
+                        time.sleep(3)
                 except Exception as e:
                     print("Exception while requesting user details. Waiting 10 seconds: ")
-                    print(e.with_traceback)
+                    print(e)
                     time.sleep(10)
             
             if "games" not in owned_games:
