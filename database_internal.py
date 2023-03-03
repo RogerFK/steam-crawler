@@ -16,10 +16,9 @@ _insert_player_data_cursor = connection.cursor(prepared=True)
 _fetch_player_data_cursor = connection.cursor(prepared=True)
 
 _insert_player_data_stmt = "INSERT INTO player_data "\
-    "(steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility) VALUES "\
-    "(?, ?, FROM_UNIXTIME(?), ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE "\
+    "(steamid, personaname, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility) VALUES "\
+    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE "\
     "personaname = VALUES(personaname), "\
-    "lastlogoff = FROM_UNIXTIME(VALUES(lastlogoff)), "\
     "commentpermission = VALUES(commentpermission), "\
     "primaryclanid = VALUES(primaryclanid), "\
     "timecreated = VALUES(timecreated), "\
@@ -42,10 +41,9 @@ _update_player_data_num_reviews_stmt = "UPDATE player_data "\
     "WHERE steamid = ?;"
 
 _insert_player_data_from_crawl_stmt = "INSERT INTO player_data "\
-    "(steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, visibility) VALUES "\
-    "(?, ?, FROM_UNIXTIME(?), ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE "\
+    "(steamid, personaname, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, visibility) VALUES "\
+    "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE "\
     "personaname = VALUES(personaname), "\
-    "lastlogoff = FROM_UNIXTIME(VALUES(lastlogoff)), "\
     "commentpermission = VALUES(commentpermission), "\
     "primaryclanid = VALUES(primaryclanid), "\
     "timecreated = VALUES(timecreated), "\
@@ -57,7 +55,6 @@ _insert_player_data_from_crawl_stmt = "INSERT INTO player_data "\
 
 _update_player_data_from_review_stmt = "UPDATE player_data "\
     "SET personaname = ?, "\
-    "lastlogoff = FROM_UNIXTIME(?), "\
     "commentpermission = ?, "\
     "primaryclanid = ?, "\
     "timecreated = FROM_UNIXTIME(?), "\
@@ -69,26 +66,22 @@ _update_player_data_from_review_stmt = "UPDATE player_data "\
     "date_retrieved = CURRENT_TIMESTAMP "\
     "WHERE steamid = ?;"
 
-_fetch_player_data_stmt = "SELECT steamid, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility "\
+_fetch_player_data_stmt = "SELECT steamid, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility "\
     "FROM player_data WHERE steamid = ?;"
 
-def internal_insert_player_data(steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility):
-    if lastlogoff is None or lastlogoff == 0:
-        lastlogoff = 1 # 1970-01-01 00:00:01, weird MariaDB design
-    _insert_player_data_cursor.execute(_insert_player_data_stmt, (steamid, personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility))
+def internal_insert_player_data(steamid, personaname, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility):
+    _insert_player_data_cursor.execute(_insert_player_data_stmt, (steamid, personaname, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews, visibility))
 
 
 def internal_get_player(steamid):
     _fetch_player_data_cursor.execute(_fetch_player_data_stmt, (steamid,))
     return _fetch_player_data_cursor.fetchone()
 
-def internal_update_player_data(steamid, personaname, visibility, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned):
-    if lastlogoff is None or lastlogoff == 0:
-        lastlogoff = 1 # 1970-01-01 00:00:01, weird MariaDB design
-    _insert_player_data_cursor.execute(_update_player_data_from_review_stmt, (personaname, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, visibility, steamid))
+def internal_update_player_data(steamid, personaname, visibility, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned):
+    _insert_player_data_cursor.execute(_update_player_data_from_review_stmt, (personaname, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, visibility, steamid))
 
 def internal_insert_partial_player_data(steamid, num_games_owned, num_reviews):
-    internal_insert_player_data(steamid, None, None, None, None, None, None, None, None, num_games_owned, num_reviews, None)
+    internal_insert_player_data(steamid, None, None, None, None, None, None, None, num_games_owned, num_reviews, None)
 
 _get_unprocessed_players_cursor = connection.cursor(prepared=True)
 

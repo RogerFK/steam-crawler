@@ -2,12 +2,17 @@ from database_internal import *
 import re
 debug = False
 
+# TODO move these 3 to database_internal.py
 def is_processed(appid):
     cur.execute("SELECT appid FROM processed_appids WHERE appid = %s;", (appid,))
     return cur.fetchone() is not None
 
 def add_dead_hidden_game(appid):
     cur.execute("INSERT INTO game_details (appid, name) VALUES (%s, 'DEAD_HIDDEN_GAME');", (appid,))
+    connection.commit()
+
+def add_faulty_game(appid):
+    cur.execute("INSERT INTO game_details (appid, name) VALUES (%s, 'FAULTY_GAME');", (appid,))
     connection.commit()
 
 def process_game_data(appid, appdetails, query_summary):
@@ -85,7 +90,7 @@ def process_game_reviews(app_id, review_dict):
         except Exception as e:
             print(f"Error processing review with recommendationid {recommendationid}: {e}")
             print(review)
-            continue
+            raise e
         process_game_review(recommendationid, steamid, app_id, voted_up, timestamp_created, timestamp_updated, playtime_at_review, playtime_forever,  received_for_free, steam_purchase, written_during_early_access, last_played)
     connection.commit()
 
@@ -105,20 +110,23 @@ def process_game_review(recommendationid, steamid, appid, voted_up, timestamp_cr
 def get_100_unprocessed_players():
     return internal_get_unprocessed_players()
 
+def get_game_data(appid):
+    return internal_get_game_data(appid)
+
 def game_exists(appid):
     return internal_get_game_data(appid) is not None
 
-def process_steam_user(steamid, personaname, visibility, num_games_owned = 0, lastlogoff=None, commentpermission=None, primaryclanid=None, timecreated=None, loccountrycode=None, locstatecode=None, loccityid=None):
+def process_steam_user(steamid, personaname, visibility, num_games_owned = 0, commentpermission=None, primaryclanid=None, timecreated=None, loccountrycode=None, locstatecode=None, loccityid=None):
     player_row = internal_get_player(steamid)
     if player_row is not None:
         # maybe we already got num_games_owned from reviews, don't update that value
         # i think this check is redundant, but better safe than sorry
-        if num_games_owned == 0 and player_row[10] is not None:
-            num_games_owned = player_row[10]
-        internal_update_player_data(steamid, personaname, visibility, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned)
+        if num_games_owned == 0 and player_row[9] is not None:
+            num_games_owned = player_row[9]
+        internal_update_player_data(steamid, personaname, visibility, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned)
     else:
         # we can't really know how many reviews they have which is why we set it to 0
-        internal_insert_player_data(steamid, personaname, visibility, lastlogoff, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews=0)
+        internal_insert_player_data(steamid, personaname, visibility, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews=0)
     connection.commit()
 
 def insert_player_game_data(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played, achievement_percentage=-1):

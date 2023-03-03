@@ -10,7 +10,7 @@ import requests
 import steamreviews
 from database import *
 import os
-from crawl_app_data import get_app_data, ERROR, SUCCESS, ALREADY_EXISTS, FULLY_PROCESSED, SKIPPED
+from crawl_app_data import get_app_data, ERROR, SUCCESS, ALREADY_EXISTS, FULLY_PROCESSED, SKIPPED, FAULTY
 from config import steam, check_rate_limit, KEY
 
 def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=False):
@@ -39,11 +39,10 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
                 if verbose:
                     print("Private/Friends only profile, setting basic player profile...")
                 # TODO: Mark visibility as 0 in database
-                # api: process_steam_user(steamid, personaname, visibility, num_games_owned = 0, lastlogoff=None, commentpermission=None, primaryclanid=None, timecreated=None, loccountrycode=None, locstatecode=None, loccityid=None):
+                # api: process_steam_user(steamid, personaname, visibility, num_games_owned = 0, commentpermission=None, primaryclanid=None, timecreated=None, loccountrycode=None, locstatecode=None, loccityid=None):
                 process_steam_user(steamid, player["personaname"], 0, 0)
                 continue
             
-            lastlogoff = player["lastlogoff"] if "lastlogoff" in player else None
             commentpermission = player["commentpermission"] if "commentpermission" in player else None
             primaryclanid = player["primaryclanid"] if "primaryclanid" in player else None
             timecreated = player["timecreated"] if "timecreated" in player else None
@@ -77,7 +76,6 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
                 if verbose:
                     print("Game list is private, skipping...")
                 process_steam_user(steamid, player["personaname"], 1, 0, 
-                                   lastlogoff=lastlogoff, 
                                    commentpermission=commentpermission, 
                                    primaryclanid=primaryclanid, 
                                    timecreated=timecreated,
@@ -107,11 +105,14 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
                     if verbose:
                         print("Non-game/mod skipped, skipping...")
                     continue
+                elif success == FAULTY:
+                    if verbose:
+                        print("Faulty game, inserting as faulty with 'FAULTY_GAME' with no info...")
+                    add_faulty_game(appid)
                 # insert_player_game_data(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played)
                 insert_player_game_data(steamid, appid, game["playtime_forever"], game["playtime_windows_forever"], game["playtime_mac_forever"], game["playtime_linux_forever"], game["rtime_last_played"])
 
             process_steam_user(steamid, player["personaname"], 2 if visible_playtime else 3, owned_games["game_count"],
-                               lastlogoff=lastlogoff, 
                                commentpermission=commentpermission, 
                                primaryclanid=primaryclanid, 
                                timecreated=timecreated,
