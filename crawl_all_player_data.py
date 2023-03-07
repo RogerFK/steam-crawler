@@ -13,7 +13,10 @@ import os
 from crawl_app_data import get_app_data, ERROR, SUCCESS, ALREADY_EXISTS, FULLY_PROCESSED, SKIPPED, FAULTY
 from config import steam, check_rate_limit, KEY
 
+num_processed_players = 0
+
 def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=False):
+    global num_processed_players
     unprocessed_players = get_100_unprocessed_players()
     while len(unprocessed_players) > 0:
         start_time = time.time()
@@ -35,7 +38,9 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
         players = response["players"]
         for player in players:
             steamid = player["steamid"]
-            if player["communityvisibilitystate"] == 1 or player["communityvisibilitystate"] == 2:
+            cvs = player["communityvisibilitystate"]
+            num_processed_players += 1
+            if cvs < 3:
                 if verbose:
                     print("Private/Friends only profile, setting basic player profile...")
                 # TODO: Mark visibility as 0 in database
@@ -87,9 +92,9 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
             visible_playtime = False
             for game in owned_games["games"]:
                 appid = game["appid"]
-                success = SUCCESS
+                success = game_exists(appid)
 
-                if not game_exists(appid):
+                if not success:
                     if verbose:
                         print(f"{appid} doesn't exist in database, crawling...")
                     success, query_count = get_app_data(str(appid), reviews=reviews, query_count=query_count, only_games=only_games, verbose=verbose)
@@ -112,18 +117,22 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
                 # insert_player_game_data(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played)
                 insert_player_game_data(steamid, appid, game["playtime_forever"], game["playtime_windows_forever"], game["playtime_mac_forever"], game["playtime_linux_forever"], game["rtime_last_played"])
 
-            process_steam_user(steamid, player["personaname"], 2 if visible_playtime else 3, owned_games["game_count"],
+            process_steam_user(steamid, player["personaname"], 2 if not visible_playtime else 3, owned_games["game_count"],
                                commentpermission=commentpermission, 
                                primaryclanid=primaryclanid, 
                                timecreated=timecreated,
                                loccountrycode=loccountrycode, 
                                locstatecode=locstatecode,
                                loccityid=loccityid)
-        print(f"Processed 100 players ({steam_ids}), Time to process batch:", time.time() - start_time, "seconds")
+        ply_number = len(players)
+        steamid_num = len(steam_ids)
+        print(f"Processed {ply_number}/{steamid_num} players ({steam_ids}), Time to process batch:", time.time() - start_time, "seconds")
+        if ply_number != steamid_num:
+            faulty_players = [steamid for steamid in steam_ids if steamid not in [player["steamid"] for player in players]]
+            print("Faulty player(s) detected, please check manually: ", faulty_players)
         unprocessed_players = get_100_unprocessed_players()
     
     return query_count
-    
 
 if __name__ == "__main__":
     import argparse
@@ -134,4 +143,12 @@ if __name__ == "__main__":
     parser.add_argument("-g", "--only_games", action="store_false", help="Only crawl games, not DLCs or other types of products.")
     args = parser.parse_args()
     print(f"Crawling player data with reviews={args.reviews} and only_games={args.only_games}...")
-    crawl_player_data(query_count=0, reviews=args.reviews, only_games=args.only_games)
+    try:
+        start_time = time.time()
+        crawl_player_data(query_count=0, reviews=args.reviews, only_games=args.only_games)
+        print("Done!")
+    except KeyboardInterrupt:
+        print("KeyboardInterrupt detected. Exiting...")
+    finally:
+        print("Total players processed:", num_processed_players)
+        print("Total time:", time.time() - start_time, "seconds")

@@ -5,7 +5,7 @@ Date: 2023-02-10
 """
 
 from typing import Tuple
-from requests import request, Response
+from requests import request, Response, exceptions
 
 import json
 import time
@@ -110,9 +110,19 @@ def get_app_data(app_id: str, reviews=False, query_count=0, only_games=True, ver
                                                                         verbose=True)
         query_summary = review_dict["query_summary"]
     else:
-        if verbose:
-            print("Getting review summary for " + name)
-        _, query_summary, query_count = steamreviews.download_reviews.download_the_full_query_summary(app_id, query_count, request_params)
+        success_flag = False
+        while success_flag == False:
+            if verbose:
+                print("Getting review summary for " + name)
+            try:
+                success_flag, query_summary, query_count = steamreviews.download_reviews.download_the_full_query_summary(app_id, query_count, request_params)
+                if not success_flag:
+                    print("Sleeping 10 seconds")
+                    time.sleep(10)
+            except exceptions.ConnectionError as e:
+                print("Error " + e)
+                print("Sleeping 10 seconds")
+                time.sleep(10)
     
     if not exists:
         process_game_data(app_id, appdata[app_id]["data"], query_summary)
@@ -136,29 +146,11 @@ if __name__ == "__main__":
             for line in f:
                 app_id = line.strip()
                 get_app_data(app_id, reviews=True)
-        # When we're done, delete the files and start getting appids from the database
-        with open(args.file, "w", encoding="utf-8") as f:
-            f.write("")
-        
-        # Get appids from the database
-        raise KeyboardInterrupt
-        while True: # wait for KeyboardInterrupt or no appids left, which will break the loop
-            appids = cur.fetchone()
-            if appids is None:
-                break
-            get_app_data(appids[0], reviews=True)
-            con.commit()
-
+        print(f"File {args.file} processed.")
+    except FileNotFoundError:
+        print("File not found.")
     except KeyboardInterrupt:
+        print("User input detected.")
+    finally:
         print("Exiting...")
-        exit(0)
-        # but first delete processed_appids from args.file
-        with open(args.file, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        cur.execute("SELECT appid FROM processed_appids")
-        processed_appids = set(cur.fetchall())
-        with open(args.file, "w", encoding="utf-8") as f:
-            for line in lines:
-                if line.strip() not in processed_appids:
-                    f.write(line)
-        # also save the last cursor from steamreviews
+        
