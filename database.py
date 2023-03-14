@@ -157,9 +157,8 @@ def insert_tag(tag):
     internal_insert_tag(tag["tagid"], tag["name"])
     connection.commit()
 
-def insert_game_tags(appid: int, tags: List[str], force_refresh: bool = True):
+def insert_game_tags(appid: int, tags: List[str], max_len = 1, force_refresh: bool = True):
     print(f"Inserting game tags {str(tags)} for appid {appid} into the database")
-    length = len(tags)
     if force_refresh:
         # this is to ensure we don't have two tags with the same priority and no repeated tags, 
         # otherwise you *might* have two tags with the same priority or one tag that's no longer in the list
@@ -168,5 +167,5 @@ def insert_game_tags(appid: int, tags: List[str], force_refresh: bool = True):
         tagid = internal_get_tagid_from_name(tag)
         if tagid is None:
             tagid = internal_insert_new_tag(tag['name'])
-        internal_insert_game_tag(appid, tagid, priority=((length-tags.index(tag))/length), ignore=not force_refresh)
+        internal_insert_game_tag(appid, tagid, priority=((max_len-tags.index(tag))/max_len), ignore=not force_refresh)
     connection.commit()

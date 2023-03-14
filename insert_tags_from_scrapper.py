@@ -5,7 +5,7 @@ from exceptions import *
 def check_duplicate_appids(df_gametags: pd.DataFrame):
     # check for duplicate appids
     appdict = dict()
-    status = True
+    max_len = 1
     for idx, row in df_gametags.iterrows():
         if row['appid'] == 'app': # error
             continue
@@ -15,10 +15,12 @@ def check_duplicate_appids(df_gametags: pd.DataFrame):
                 print("Error: duplicate appid with different values found: " + row['appid'])
                 print("Current: " + str(current))
                 print("Previous: " + str(appdict[row['appid']]))
-                status = False
+                max_len = 0
         else:
             appdict[row['appid']] = (row['name'], row['tags'])
-    return status
+            if max_len > 0:
+                max_len = max(max_len, len(row['tags']))
+    return max_len
 
 def insert_tags_from_scrapper(filename):
     try:
@@ -33,7 +35,6 @@ def insert_tags_from_scrapper(filename):
     
     requires_manual_intervention = []
     for appid, row in tags.iterrows():
-
         if appid == 'app' or row is None: # error
             continue
 
@@ -50,7 +51,7 @@ def insert_tags_from_scrapper(filename):
                 requires_manual_intervention += (e.name, e.appids)
                 continue
 
-        insert_game_tags(appid, row['tags'])
+        insert_game_tags(appid, row['tags'], max_len)
     
     if len(requires_manual_intervention) > 0:
         print("Manual intervention required for the following games:")
@@ -63,9 +64,9 @@ if __name__ == "__main__":
     parser.add_argument("filename", help="Filename of the JSON Lines file to be inserted")
     args = parser.parse_args()
     df_gametags = pd.read_json(args.filename, lines=True)
-    if check_duplicate_appids(df_gametags):
+    if (max_len := check_duplicate_appids(df_gametags)) > 0:
         print("Inserting tags from " + args.filename + "...")
-        insert_tags_from_scrapper(args.filename)
+        insert_tags_from_scrapper(args.filename, max_len)
         print("Done.")
     else:
         print("Error: duplicate appids with different values found. Manual review required. Aborting.")
