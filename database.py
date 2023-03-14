@@ -1,6 +1,8 @@
+from typing import Any, List, Optional
 from database_internal import *
 import re
 debug = False
+from exceptions import RequiresManualIntervention
 
 # TODO move these 3 to database_internal.py
 def is_processed(appid):
@@ -113,6 +115,17 @@ def get_100_unprocessed_players():
 def get_game_data(appid):
     return internal_get_game_data(appid)
 
+def get_game_data_from_name(name: str) -> int:
+    game_data = internal_get_game_data_from_name(name)
+    # check if there's only one row
+    if len(game_data) == 0:
+        return None
+    if len(game_data) == 1:
+        return game_data[0]
+    else:
+        raise RequiresManualIntervention([row[0] for row in game_data], name)
+    
+
 def game_exists(appid):
     return internal_get_game_data(appid) is not None
 
@@ -137,4 +150,23 @@ def insert_player_game_data(steamid, appid, playtime_forever, playtime_windows, 
 def insert_candidate_game(appid):
     #print(f"Inserting candidate game with appid {appid} into the database")
     internal_insert_or_update_candidate_game(appid)
+    connection.commit()
+
+def insert_tag(tag):
+    print(f"Inserting tag {tag} into the database")
+    internal_insert_tag(tag["tagid"], tag["name"])
+    connection.commit()
+
+def insert_game_tags(appid: int, tags: List[str], force_refresh: bool = True):
+    print(f"Inserting game tags {str(tags)} for appid {appid} into the database")
+    length = len(tags)
+    if force_refresh:
+        # this is to ensure we don't have two tags with the same priority and no repeated tags, 
+        # otherwise you *might* have two tags with the same priority or one tag that's no longer in the list
+        internal_delete_old_game_tags(appid)
+    for tag in tags:
+        tagid = internal_get_tagid_from_name(tag)
+        if tagid is None:
+            tagid = internal_insert_new_tag(tag['name'])
+        internal_insert_game_tag(appid, tagid, priority=((length-tags.index(tag))/length), ignore=not force_refresh)
     connection.commit()

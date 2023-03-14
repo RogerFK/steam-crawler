@@ -162,6 +162,7 @@ cython_debug/
 # Specific
 data/
 *.json
+*output*.jl
 !appids.txt
 *.txt
 *.db

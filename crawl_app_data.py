@@ -54,8 +54,8 @@ def get_app_data(app_id: str, reviews=False, query_count=0, only_games=True, ver
     if not exists:
         while retry and not exists:
             try:
-                response = request("GET", "https://store.steampowered.com/api/appdetails", params={"appids": app_id, "cc": "us", "l": "english"})
                 query_count = check_rate_limit(query_count)
+                response = request("GET", "https://store.steampowered.com/api/appdetails", params={"appids": app_id, "cc": "us", "l": "english"})
             except Exception as e:
                 print("Exception while requesting appdetails: " + str(e))
                 consecutive_retries += 1

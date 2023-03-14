@@ -112,7 +112,6 @@ _insert_game_details_stmt = "INSERT INTO game_details "\
 
 def internal_insert_game_details(appid, name, required_age, is_free, controller_support, has_demo, price_usd, mac_os, positive_reviews, negative_reviews, total_reviews, has_achievements, release_date, coming_soon):
     _insert_game_details_cursor.execute(_insert_game_details_stmt, (appid, name, required_age, is_free, controller_support, has_demo, price_usd, mac_os, positive_reviews, negative_reviews, total_reviews, has_achievements, release_date, coming_soon))
-    # connection.commit()
 
 _insert_game_genres_cursor = connection.cursor(prepared=True)
 
@@ -128,7 +127,6 @@ def internal_insert_game_genres(appid, genres):
     for genre in genres:
         _insert_genre_cursor.execute(_insert_genre_stmt, (genre["id"], genre["description"]))
         _insert_game_genres_cursor.execute(_insert_game_genres_stmt, (appid, genre["id"]))
-    # connection.commit()
 
 _insert_game_categories_cursor = connection.cursor(prepared=True)
 
@@ -144,7 +142,6 @@ def internal_insert_game_categories(appid, categories):
     for category in categories:
         _insert_category_cursor.execute(_insert_category_stmt, (category["id"], category["description"]))
         _insert_game_categories_cursor.execute(_insert_game_categories_stmt, (appid, category["id"]))
-    # connection.commit()
 
 _insert_game_developers_cursor = connection.cursor(prepared=True)
 
@@ -175,7 +172,6 @@ def internal_insert_game_developers(appid, developers: list[str]):
             connection.commit() # we need commit for the next row to not violate the foreign key constraint
         developer_id = developer_id[0]
         _insert_game_developers_cursor.execute(_insert_game_developers_stmt, (appid, developer_id))
-    # connection.commit()
 
 _insert_game_publishers_cursor = connection.cursor(prepared=True)
 
@@ -206,7 +202,6 @@ def internal_insert_game_publishers(appid, publishers: list[str]):
             connection.commit() # we need commit for the next row to not violate the foreign key constraint
         publisher_id = publisher_id[0]
         _insert_game_publishers_cursor.execute(_insert_game_publishers_stmt, (appid, publisher_id))
-    # connection.commit()
 
 _insert_player_game_reviews_cursor = connection.cursor(prepared=True)
 
@@ -224,7 +219,6 @@ _insert_player_game_reviews_stmt = "INSERT INTO player_game_reviews "\
 def internal_insert_player_game_review(recommendationid, steamid, appid, voted_up, timestamp_created, timestamp_updated, playtime_at_review, playtime_forever,  received_for_free, steam_purchase, written_during_early_access, last_played):
     _insert_player_game_reviews_cursor.execute(_insert_player_game_reviews_stmt, (recommendationid, steamid, appid, voted_up, timestamp_created, timestamp_updated, playtime_at_review, received_for_free, steam_purchase, written_during_early_access))
     internal_insert_player_game(steamid, appid, playtime_forever, None, None, None, None, last_played)
-    # connection.commit()
 
 _insert_player_games_cursor = connection.cursor(prepared=True)
 
@@ -241,7 +235,6 @@ _insert_player_games_stmt = "INSERT INTO player_games "\
 def internal_insert_player_game(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, achievement_percentage, rtime_last_played):
     rtime_last_played = rtime_last_played if rtime_last_played > 0 else 1 # apparently MySQL's timestamps go from 1970-01-01 00:00:01 to 2038-01-19 03:14:07, 1970-01-01 00:00:00 isn't valid
     _insert_player_games_cursor.execute(_insert_player_games_stmt, (steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, achievement_percentage, rtime_last_played))
-    # connection.commit()
 
 _insert_candidate_games_cursor = connection.cursor(prepared=True)
 
@@ -249,7 +242,6 @@ _insert_candidate_games_stmt = "INSERT INTO candidate_appids (appid) VALUES (?) 
 
 def internal_insert_or_update_candidate_game(appid):
     _insert_candidate_games_cursor.execute(_insert_candidate_games_stmt, (appid,))
-    # connection.commit()
 
 _insert_processed_appids_cursor = connection.cursor(prepared=True)
 
@@ -262,7 +254,6 @@ _delete_candidate_games_stmt = "DELETE FROM candidate_appids WHERE appid = ?;"
 def internal_insert_processed_appid(appid):
     _insert_processed_appids_cursor.execute(_insert_processed_appids_stmt, (appid,))
     _delete_candidate_games_cursor.execute(_delete_candidate_games_stmt, (appid,))
-    # connection.commit()
 
 _get_candidate_games_cursor = connection.cursor(prepared=True)
 
@@ -272,10 +263,54 @@ def internal_get_candidate_games(limit):
     candidates = _get_candidate_games_cursor.fetchall()
     return [candidate[0] for candidate in candidates]
 
-get_game_data = connection.cursor(prepared=True)
+_get_game_data_cursor = connection.cursor(prepared=True)
 
-get_game_data_stmt = "SELECT * FROM game_details WHERE appid = ?;"
+_get_game_data_stmt = "SELECT * FROM game_details WHERE appid = ?;"
 
 def internal_get_game_data(appid):
-    get_game_data.execute(get_game_data_stmt, (appid,))
-    return get_game_data.fetchone()
+    _get_game_data_cursor.execute(_get_game_data_stmt, (appid,))
+    return _get_game_data_cursor.fetchone()
+
+_get_game_data_from_name_stmt = "SELECT * FROM game_details WHERE name = ?;"
+
+def internal_get_game_data_from_name(name):
+    _get_game_data_cursor.execute(_get_game_data_from_name_stmt, (name,))
+    return _get_game_data_cursor.fetchall()
+
+_insert_tag_cursor = connection.cursor(prepared=True)
+
+_insert_tag_stmt = "INSERT INTO tags (tagid, name) VALUES (?, ?);"
+
+def internal_insert_tag(tagid, name):
+    _insert_tag_cursor.execute(_insert_tag_stmt, (tagid, name))
+
+_insert_new_tag_stmt = "INSERT INTO tags (name) VALUES (?);"
+
+def internal_insert_new_tag(name):
+    _insert_tag_cursor.execute(_insert_new_tag_stmt, (name,))
+    return _insert_tag_cursor.lastrowid
+
+_get_tagid_from_name = connection.cursor(prepared=True)
+
+_get_tagid_from_name_stmt = "SELECT tagid FROM tags WHERE name = ?;"
+
+def internal_get_tagid_from_name(name):
+    _get_tagid_from_name.execute(_get_tagid_from_name_stmt, (name,))
+    val = _get_tagid_from_name.fetchone()
+    return val[0] if val else None
+
+_insert_delete_game_tag_cursor = connection.cursor(prepared=True)
+
+_insert_game_tag_stmt = "INSERT INTO game_tags (appid, tagid, priority) VALUES (?, ?, ?);"
+_insert_ignore_game_tag_stmt = "INSERT IGNORE INTO game_tags (appid, tagid, priority) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE priority = VALUES(priority);"
+
+def internal_insert_game_tag(appid, tagid, priority, ignore=False):
+    if ignore:
+        _insert_delete_game_tag_cursor.execute(_insert_ignore_game_tag_stmt, (appid, tagid, priority))
+    else:
+        _insert_delete_game_tag_cursor.execute(_insert_game_tag_stmt, (appid, tagid, priority))
+
+_delete_game_tag_stmt = "DELETE FROM game_tags WHERE appid = ?;"
+
+def internal_delete_old_game_tags(appid):
+    _insert_delete_game_tag_cursor.execute(_delete_game_tag_stmt, (appid,))

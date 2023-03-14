@@ -23,8 +23,8 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
         steam_ids = [str(player[0]) for player in unprocessed_players]
         while True:
             try:
-                response = steam.users.get_user_details(",".join(steam_ids), single=False)
                 query_count = check_rate_limit(query_count)
+                response = steam.users.get_user_details(",".join(steam_ids), single=False)
                 if "players" in response:
                     break
                 else:
@@ -56,6 +56,7 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
             loccityid = player["loccityid"] if "loccityid" in player else None
             while True:
                 try:
+                    query_count = check_rate_limit(query_count)
                     resp = requests.request(
                         "get",
                         "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/",
@@ -64,7 +65,6 @@ def crawl_player_data(query_count=0, reviews=False, only_games=True, verbose=Fal
                                 "include_played_free_games": True,
                                 "key": KEY},
                     )
-                    query_count = check_rate_limit(query_count)
                     if resp.status_code == 200: # I didn't trust the API to return stuff properly when rate limited
                         owned_games = json.loads(resp.text)["response"]
                         break
