@@ -57,25 +57,27 @@ def get_app_data(app_id: str, reviews=False, query_count=0, only_games=True, ver
                 query_count = check_rate_limit(query_count)
                 response = request("GET", "https://store.steampowered.com/api/appdetails", params={"appids": app_id, "cc": "us", "l": "english"})
             except Exception as e:
-                print("Exception while requesting appdetails: " + str(e))
+                print("Exception while requesting appdetails: " + str(e) + "\n")
                 consecutive_retries += 1
                 if consecutive_retries > 3 * 5: # maximum waiting time for the connection to be back: 5 minutes
                     # this high number also ensures the user may fix the problem without having to restart the script
                     consecutive_retries = 3 * 5
                 
-                print(f"Waiting {(consecutive_retries * 20 / 60)} minute(s) before retrying...")
-                time.sleep(consecutive_retries * 20)
+                print(f"Waiting {(consecutive_retries * 20.0 / 60.0)} minute(s) before retrying...")
+                time.sleep(consecutive_retries * 20.0)
                 continue
 
             retry = response.status_code != 200
             if retry:
                 print(f"REST API error ({response.status_code}): " + str(response.text))
-                print("Headers: " + str(response.headers))
-                time.sleep(60 + consecutive_retries * 20)
+                print("Headers: " + str(response.headers) + "\n")
+                
+                print(f"Waiting {(30.0 + consecutive_retries * 30.0 / 60.0)} minute(s) before retrying...")
+                time.sleep(30.0 + consecutive_retries * 30.0)
                 consecutive_retries += 1
                 if consecutive_retries > 3: # maximum waiting time for the API to respond again: 2 minutes
                     # this high number also ensures the user may fix the problem without having to restart the script
-                    consecutive_retries = 6
+                    consecutive_retries = 3
 
         if len(response.text) == 0:
             # example: https://store.steampowered.com/api/appdetails?appids=2124470
