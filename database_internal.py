@@ -223,18 +223,18 @@ def internal_insert_player_game_review(recommendationid, steamid, appid, voted_u
 _insert_player_games_cursor = connection.cursor(prepared=True)
 
 _insert_player_games_stmt = "INSERT INTO player_games "\
-    "(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, achievement_percentage, rtime_last_played) "\
-    "VALUES (?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?)) ON DUPLICATE KEY UPDATE "\
+    "(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played) "\
+    "VALUES (?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?)) ON DUPLICATE KEY UPDATE "\
     "playtime_forever = VALUES(playtime_forever), "\
     "playtime_windows = VALUES(playtime_windows), "\
     "playtime_mac = VALUES(playtime_mac), "\
     "playtime_linux = VALUES(playtime_linux), "\
-    "achievement_percentage = VALUES(achievement_percentage), "\
     "rtime_last_played = VALUES(rtime_last_played);"
-
-def internal_insert_player_game(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, achievement_percentage, rtime_last_played):
+    #"achievement_percentage = VALUES(achievement_percentage), "\
+    
+def internal_insert_player_game(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played):
     rtime_last_played = rtime_last_played if rtime_last_played > 0 else 1 # apparently MySQL's timestamps go from 1970-01-01 00:00:01 to 2038-01-19 03:14:07, 1970-01-01 00:00:00 isn't valid
-    _insert_player_games_cursor.execute(_insert_player_games_stmt, (steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, achievement_percentage, rtime_last_played))
+    _insert_player_games_cursor.execute(_insert_player_games_stmt, (steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played))
 
 _insert_candidate_games_cursor = connection.cursor(prepared=True)
 

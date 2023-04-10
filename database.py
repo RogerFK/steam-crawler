@@ -142,9 +142,9 @@ def process_steam_user(steamid, personaname, visibility, num_games_owned = 0, co
         internal_insert_player_data(steamid, personaname, visibility, commentpermission, primaryclanid, timecreated, loccountrycode, locstatecode, loccityid, num_games_owned, num_reviews=0)
     connection.commit()
 
-def insert_player_game_data(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played, achievement_percentage=-1):
+def insert_player_game_data(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played):
     insert_candidate_game(appid)
-    internal_insert_player_game(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, achievement_percentage, rtime_last_played)
+    internal_insert_player_game(steamid, appid, playtime_forever, playtime_windows, playtime_mac, playtime_linux, rtime_last_played)
     connection.commit()
 
 def insert_candidate_game(appid):

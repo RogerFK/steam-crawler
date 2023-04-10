@@ -71,14 +71,14 @@ def get_app_data(app_id: str, reviews=False, query_count=0, only_games=True, ver
             if retry:
                 print(f"REST API error ({response.status_code}): " + str(response.text))
                 print("Headers: " + str(response.headers) + "\n")
-                
-                print(f"Waiting {(30.0 + consecutive_retries * 30.0 / 60.0)} minute(s) before retrying...")
-                time.sleep(30.0 + consecutive_retries * 30.0)
                 consecutive_retries += 1
                 if consecutive_retries > 3: # maximum waiting time for the API to respond again: 2 minutes
                     # this high number also ensures the user may fix the problem without having to restart the script
                     consecutive_retries = 3
 
+                print(f"Waiting {((30.0 + consecutive_retries * 30.0) / 60.0)} minute(s) before retrying...")
+                time.sleep(30.0 + consecutive_retries * 30.0)
+                
         if len(response.text) == 0:
             # example: https://store.steampowered.com/api/appdetails?appids=2124470
             # it exists in SteamDB and the store, but the API returns an empty response
