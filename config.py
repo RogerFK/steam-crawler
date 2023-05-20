@@ -1,5 +1,5 @@
 
-from steam import Steam
+from steam import Steam  # https://pypi.org/project/python-steam-api/
 from decouple import config, UndefinedValueError
 import time
 from collections import deque
@@ -32,7 +32,7 @@ request_params = {
 # specially if we have headroom for ~347 queries per 5 minutes (69.4 queries per minute)
 # either way, to be more precise we can just do it per minute, and add 10 seconds of headroom
 _rate_limits = {
-    "max_num_queries": 63,
+    "max_num_queries": 45,
     "cooldown": (60),  # 60 secs for steamreviews
     "cooldown_bad_gateway": 10,  # arbitrary value to tackle 502 Bad Gateway due to saturated servers (during sales)
 }
